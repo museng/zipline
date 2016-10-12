@@ -23,6 +23,7 @@ from zipline import TradingAlgorithm
 from zipline.assets.continuous_futures import OrderedContracts
 from zipline.testing.fixtures import (
     WithCreateBarData,
+    WithBcolzFutureMinuteBarReader,
     WithSimParams,
     ZiplineTestCase,
 )
@@ -30,6 +31,7 @@ from zipline.testing.fixtures import (
 
 class ContinuousFuturesTestCase(WithCreateBarData,
                                 WithSimParams,
+                                WithBcolzFutureMinuteBarReader,
                                 ZiplineTestCase):
 
     START_DATE = pd.Timestamp('2015-01-05', tz='UTC')
@@ -66,17 +68,17 @@ class ContinuousFuturesTestCase(WithCreateBarData,
                          Timestamp('2022-08-19', tz='UTC')],
             'notice_date': [Timestamp('2016-01-26', tz='UTC'),
                             Timestamp('2016-02-26', tz='UTC'),
-                            Timestamp('2016-03-26', tz='UTC'),
+                            Timestamp('2016-03-24', tz='UTC'),
                             Timestamp('2016-04-26', tz='UTC'),
                             Timestamp('2022-01-26', tz='UTC')],
             'expiration_date': [Timestamp('2016-01-26', tz='UTC'),
                                 Timestamp('2016-02-26', tz='UTC'),
-                                Timestamp('2016-03-26', tz='UTC'),
+                                Timestamp('2016-03-24', tz='UTC'),
                                 Timestamp('2016-04-26', tz='UTC'),
                                 Timestamp('2022-01-26', tz='UTC')],
             'auto_close_date': [Timestamp('2016-01-26', tz='UTC'),
                                 Timestamp('2016-02-26', tz='UTC'),
-                                Timestamp('2016-03-26', tz='UTC'),
+                                Timestamp('2016-03-24', tz='UTC'),
                                 Timestamp('2016-04-26', tz='UTC'),
                                 Timestamp('2022-01-26', tz='UTC')],
             'tick_size': [0.001] * 5,
@@ -286,6 +288,48 @@ def record_current_contract(algo, data):
                          'FOJ16',
                          'End of secondary chain should be FOJ16 on second '
                          'session.')
+
+    def test_history_sid(self):
+        cf = self.data_portal.asset_finder.create_continuous_future(
+            'FO', 0, 'calendar')
+        window = self.data_portal.get_history_window(
+            [cf.sid], Timestamp('2016-03-06', tz='UTC'), 30, '1d', 'sid')
+
+        self.assertEqual(window.loc['2016-01-26', cf],
+                         0,
+                         "Should be FOF16 at beginning of window.")
+
+        self.assertEqual(window.loc['2016-02-26', cf],
+                         0,
+                         "Should be FOF16 on session with roll.")
+
+        self.assertEqual(window.loc['2016-02-29', cf],
+                         1,
+                         "Should be FOG16 on session after roll.")
+
+        # Advance the window a month.
+        window = self.data_portal.get_history_window(
+            [cf.sid], Timestamp('2016-04-06', tz='UTC'), 30, '1d', 'sid')
+
+        self.assertEqual(window.loc['2016-02-24', cf],
+                         0,
+                         "Should be FOF16 at beginning of window.")
+
+        self.assertEqual(window.loc['2016-02-26', cf],
+                         0,
+                         "Should be FOF16 on session with upcoming roll.")
+
+        self.assertEqual(window.loc['2016-02-29', cf],
+                         1,
+                         "Should be FOG16 on session after roll.")
+
+        self.assertEqual(window.loc['2016-03-24', cf],
+                         1,
+                         "Should be FOG16 on session with upcoming roll.")
+
+        self.assertEqual(window.loc['2016-03-29', cf],
+                         2,
+                         "Should be FOH16 on session after roll.")
 
 
 class OrderedContractsTestCase(ZiplineTestCase):

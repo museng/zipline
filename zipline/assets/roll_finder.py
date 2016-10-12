@@ -15,6 +15,8 @@
 from abc import ABCMeta, abstractmethod
 from six import with_metaclass
 
+from pandas import Timestamp
+
 
 class RollFinder(with_metaclass(ABCMeta, object)):
     """
@@ -61,3 +63,23 @@ class CalendarRollFinder(RollFinder):
         # Here is where a volume check would be.
         primary = primary_candidate
         return oc.contract_at_offset(primary, offset)
+
+    def get_rolls(self, root_symbol, start, end, offset):
+        oc = self.asset_finder.get_ordered_contracts(root_symbol)
+        primary_at_end = self.get_contract_center(root_symbol, end, 0)
+        for i, sid in enumerate(oc.contract_sids):
+            if sid == primary_at_end:
+                break
+        i += offset
+        first = oc.contract_sids[i]
+        rolls = [(first, None)]
+        i -= 1
+        auto_close_date = Timestamp(oc.auto_close_dates[i - offset], tz='UTC')
+        while auto_close_date > start and i > -1:
+            rolls.insert(0, (oc.contract_sids[i],
+                             auto_close_date))
+            auto_close_date = Timestamp(oc.auto_close_dates[i - offset],
+                                        tz='UTC')
+            i -= 1
+
+        return rolls
